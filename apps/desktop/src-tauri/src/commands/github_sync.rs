@@ -215,8 +215,11 @@ fn do_discard_local(repo: &Repository, token: &str) -> Result<(), AppError> {
     repo.find_remote("origin")?
         .fetch(&[&branch], Some(&mut fetch_opts), None)?;
 
-    let remote_ref = repo.find_reference(&format!("refs/remotes/origin/{branch}"))?;
-    let remote_commit = remote_ref.peel_to_commit()?;
+    // Reset to FETCH_HEAD (the just-fetched tip), not refs/remotes/origin/*:
+    // a bare-refspec fetch only reliably updates FETCH_HEAD, so reading the
+    // remote-tracking ref could hard-reset to a stale commit.
+    let fetch_head = repo.find_reference("FETCH_HEAD")?;
+    let remote_commit = fetch_head.peel_to_commit()?;
     repo.reset(
         remote_commit.as_object(),
         ResetType::Hard,
