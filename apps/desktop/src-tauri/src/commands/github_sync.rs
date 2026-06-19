@@ -132,6 +132,36 @@ fn open_repo(path: &str) -> Result<Repository, AppError> {
     Repository::open(path).map_err(|e| AppError::Git(e.to_string()))
 }
 
+/// True when `path` is a git repo whose `origin` remote points at
+/// `full_name` (e.g. `owner/repo`). Used to decide whether an existing
+/// destination directory is a reusable clone of the repo being connected.
+/// Comparison ignores the URL scheme/host, an optional `.git` suffix, and
+/// case, so `https://github.com/Owner/Repo.git` matches `owner/repo`.
+fn repo_matches_origin(path: &std::path::Path, full_name: &str) -> bool {
+    let Ok(repo) = Repository::open(path) else {
+        return false;
+    };
+    let Ok(remote) = repo.find_remote("origin") else {
+        return false;
+    };
+    let Ok(url) = remote.url() else {
+        return false;
+    };
+    let normalize = |s: &str| {
+        s.trim_end_matches('/')
+            .trim_end_matches(".git")
+            .rsplit(['/', ':'])
+            .take(2)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>()
+            .join("/")
+            .to_lowercase()
+    };
+    normalize(url) == normalize(full_name)
+}
+
 /// Fetch `origin` and fast-forward the current branch when possible.
 ///
 /// Returns `diverged = true` (without mutating the tree) when the branch
@@ -497,7 +527,17 @@ pub async fn github_clone_repo(
         let dest = home.join("Desktop").join("Memento").join(&repo_name);
 
         if dest.exists() {
-            return Err(AppError::AlreadyExists(dest.to_string_lossy().to_string()));
+            // The destination already exists. If it's an existing clone of the
+            // same repo (e.g. the user reconnected after a previous run), reuse
+            // it: rewrite the pointer and open it as the workspace. Only fail
+            // when the path is occupied by something unrelated, so we never
+            // touch a directory that isn't this repo's checkout.
+            let path = dest.to_string_lossy().to_string();
+            if repo_matches_origin(&dest, &full_name) {
+                write_pointer(&app, &path, &full_name)?;
+                return Ok(CloneResult { path });
+            }
+            return Err(AppError::AlreadyExists(path));
         }
         if let Some(parent) = dest.parent() {
             std::fs::create_dir_all(parent)?;
@@ -812,5 +852,39 @@ mod tests {
         );
         assert!(other.exists());
         assert_eq!(fs::read_to_string(&other).unwrap(), "keep me\n");
+    }
+
+    /// Set `origin` to `url`, then assert `repo_matches_origin` against
+    /// `full_name`.
+    fn assert_origin_match(url: &str, full_name: &str, expected: bool) {
+        let (dir, repo) = init_repo_with_commit();
+        repo.remote("origin", url).unwrap();
+        drop(repo);
+        assert_eq!(
+            repo_matches_origin(dir.path(), full_name),
+            expected,
+            "url={url} full_name={full_name}"
+        );
+    }
+
+    #[test]
+    fn repo_matches_origin_ignores_suffix_scheme_and_case() {
+        assert_origin_match("https://github.com/owner/repo.git", "owner/repo", true);
+        assert_origin_match("https://github.com/owner/repo", "owner/repo", true);
+        assert_origin_match("https://github.com/Owner/Repo.git", "owner/repo", true);
+        assert_origin_match("git@github.com:owner/repo.git", "owner/repo", true);
+        assert_origin_match("https://github.com/owner/other.git", "owner/repo", false);
+        assert_origin_match("https://github.com/other/repo.git", "owner/repo", false);
+    }
+
+    #[test]
+    fn repo_matches_origin_false_for_non_repo_or_no_origin() {
+        // Plain directory, not a git repo.
+        let dir = TempDir::new().unwrap();
+        assert!(!repo_matches_origin(dir.path(), "owner/repo"));
+
+        // Repo with no `origin` remote.
+        let (dir, _repo) = init_repo_with_commit();
+        assert!(!repo_matches_origin(dir.path(), "owner/repo"));
     }
 }

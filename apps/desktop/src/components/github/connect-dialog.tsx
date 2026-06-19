@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { LockIcon } from "@hugeicons/core-free-icons";
+import { SquareLock02Icon } from "@hugeicons/core-free-icons";
 import { GithubIcon } from "@/components/icons/github-icon";
 import type { RepoInfo } from "@/lib/tauri";
 import { useConnectStore } from "./connect-store";
@@ -110,18 +110,20 @@ function RepoRow({ repo, first, onUse }: { repo: RepoInfo; first: boolean; onUse
       style={first ? undefined : { borderTop: "1px solid var(--line-subtler)" }}
     >
       <GithubIcon size={18} />
-      <span className="min-w-0 flex-1 truncate text-[13px]">
-        <span className="text-[var(--text-muted)]">{owner}/</span>
-        <span className="font-medium text-[var(--text-primary)]">{name}</span>
+      <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px]">
+        <span className="truncate">
+          <span className="text-[var(--text-muted)]">{owner}/</span>
+          <span className="font-medium text-[var(--text-primary)]">{name}</span>
+        </span>
+        {repo.private ? (
+          <HugeiconsIcon
+            icon={SquareLock02Icon}
+            size={14}
+            className="shrink-0 text-[var(--text-muted)]"
+            aria-label="private"
+          />
+        ) : null}
       </span>
-      {repo.private ? (
-        <HugeiconsIcon
-          icon={LockIcon}
-          size={14}
-          className="shrink-0 text-[var(--text-muted)]"
-          aria-label="private"
-        />
-      ) : null}
       <span
         className="shrink-0 rounded-md px-3 py-1 text-[12px] font-medium opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
         style={{ background: "var(--text-primary)", color: "var(--surface-primary)" }}

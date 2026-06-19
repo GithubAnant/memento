@@ -77,6 +77,11 @@ Turn Memento into a local editor over a GitHub-backed memory repo, where:
   - Clones via `git2` to `~/Desktop/Memento/<repo-name>/` using the keychain
     token as the credential (`RemoteCallbacks::credentials` →
     `Cred::userpass_plaintext(token, "")`).
+  - If the destination already exists: when it's an existing clone whose
+    `origin` matches `full_name` (`repo_matches_origin`, comparing
+    `owner/repo` case-insensitively and ignoring scheme/host/`.git`), reuse it
+    (rewrite the pointer + open as workspace) instead of re-cloning; an
+    unrelated directory at the path is rejected with `AlreadyExists`.
   - Writes the pointer file `~/.memento/state.json`:
     `{ "memoryPath": "<abs clone path>", "repo": "<owner/name>" }`.
   - Opens the clone as the workspace (existing restore/open path).
