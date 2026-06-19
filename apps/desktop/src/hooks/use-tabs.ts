@@ -1,4 +1,9 @@
-import { createSettingsTab, useEditorStore } from "@/stores/editor-store";
+import {
+  createScmTab,
+  createSettingsTab,
+  createStatsTab,
+  useEditorStore,
+} from "@/stores/editor-store";
 import { locationBehavior } from "@/components/editor-area/page-kinds";
 import type { DocumentStats } from "@/lib/document-stats";
 
@@ -166,4 +171,14 @@ export function useOpenOrFocus() {
 export function useOpenSettingsTab() {
   const openOrFocus = useOpenOrFocus();
   return () => openOrFocus((tab) => tab.location.kind === "settings", createSettingsTab);
+}
+
+export function useOpenScmTab() {
+  const openOrFocus = useOpenOrFocus();
+  return () => openOrFocus((tab) => tab.location.kind === "scm", createScmTab);
+}
+
+export function useOpenStatsTab() {
+  const openOrFocus = useOpenOrFocus();
+  return () => openOrFocus((tab) => tab.location.kind === "stats", createStatsTab);
 }

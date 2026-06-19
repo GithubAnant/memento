@@ -269,8 +269,12 @@ fn install_app_menu(
     let cli_item = MenuItemBuilder::with_id("cli.toggle", CLI_MENU_INSTALL_LABEL).build(app)?;
 
     let app_submenu = {
-        let b = SubmenuBuilder::new(app, "Writer")
-            .item(&PredefinedMenuItem::about(app, Some("About Writer"), None)?)
+        let b = SubmenuBuilder::new(app, "Memento")
+            .item(&PredefinedMenuItem::about(
+                app,
+                Some("About Memento"),
+                None,
+            )?)
             .separator()
             .item(&check_item)
             .separator()
@@ -298,6 +302,108 @@ fn install_app_menu(
         .select_all()
         .build()?;
 
+    let file_submenu = {
+        let new_file = MenuItemBuilder::new("New File")
+            .id("file.new")
+            .accelerator("CmdOrCtrl+N")
+            .build(app)?;
+        let open_file = MenuItemBuilder::new("Open File…")
+            .id("file.open")
+            .accelerator("CmdOrCtrl+O")
+            .build(app)?;
+        let open_folder = MenuItemBuilder::new("Open Folder…")
+            .id("file.open-folder")
+            .accelerator("CmdOrCtrl+Shift+O")
+            .build(app)?;
+        let save = MenuItemBuilder::new("Save")
+            .id("file.save")
+            .accelerator("CmdOrCtrl+S")
+            .build(app)?;
+        let reveal = MenuItemBuilder::new("Reveal in Finder")
+            .id("file.reveal")
+            .build(app)?;
+        SubmenuBuilder::new(app, "File")
+            .item(&new_file)
+            .item(&open_file)
+            .item(&open_folder)
+            .separator()
+            .item(&save)
+            .item(&reveal)
+            .build()?
+    };
+
+    let view_submenu = {
+        let sidebar = MenuItemBuilder::new("Toggle Sidebar")
+            .id("view.sidebar")
+            .accelerator("CmdOrCtrl+B")
+            .build(app)?;
+        let palette = MenuItemBuilder::new("Command Palette")
+            .id("view.palette")
+            .accelerator("CmdOrCtrl+K")
+            .build(app)?;
+        let stats = MenuItemBuilder::new("Stats").id("view.stats").build(app)?;
+        let settings = MenuItemBuilder::new("Settings")
+            .id("view.settings")
+            .accelerator("CmdOrCtrl+,")
+            .build(app)?;
+        SubmenuBuilder::new(app, "View")
+            .item(&sidebar)
+            .item(&palette)
+            .separator()
+            .item(&stats)
+            .item(&settings)
+            .build()?
+    };
+
+    let github_submenu = {
+        let push = MenuItemBuilder::new("Push")
+            .id("github.push")
+            .accelerator("CmdOrCtrl+Shift+P")
+            .build(app)?;
+        let fetch = MenuItemBuilder::new("Fetch Now")
+            .id("github.fetch")
+            .build(app)?;
+        let changes = MenuItemBuilder::new("View Changes")
+            .id("github.changes")
+            .accelerator("CmdOrCtrl+Shift+G")
+            .build(app)?;
+        let signout = MenuItemBuilder::new("Sign Out")
+            .id("github.signout")
+            .build(app)?;
+        SubmenuBuilder::new(app, "GitHub")
+            .item(&push)
+            .item(&fetch)
+            .item(&changes)
+            .separator()
+            .item(&signout)
+            .build()?
+    };
+
+    let go_submenu = {
+        let back = MenuItemBuilder::new("Back")
+            .id("go.back")
+            .accelerator("CmdOrCtrl+[")
+            .build(app)?;
+        let forward = MenuItemBuilder::new("Forward")
+            .id("go.forward")
+            .accelerator("CmdOrCtrl+]")
+            .build(app)?;
+        let go_to_file = MenuItemBuilder::new("Go to File…")
+            .id("go.file")
+            .accelerator("CmdOrCtrl+P")
+            .build(app)?;
+        let switch_workspace = MenuItemBuilder::new("Switch Workspace")
+            .id("go.workspace")
+            .build(app)?;
+        SubmenuBuilder::new(app, "Go")
+            .item(&back)
+            .item(&forward)
+            .separator()
+            .item(&go_to_file)
+            .item(&switch_workspace)
+            .build()?
+    };
+
     let window_submenu = SubmenuBuilder::new(app, "Window")
         .minimize()
         .item(&PredefinedMenuItem::fullscreen(app, None)?)
@@ -306,7 +412,11 @@ fn install_app_menu(
 
     let menu = MenuBuilder::new(app)
         .item(&app_submenu)
+        .item(&file_submenu)
         .item(&edit_submenu)
+        .item(&view_submenu)
+        .item(&github_submenu)
+        .item(&go_submenu)
         .item(&window_submenu)
         .build()?;
 
@@ -324,6 +434,27 @@ fn install_app_menu(
     app.on_menu_event(|app, event| match event.id().0.as_str() {
         "updater.check" => updater::start_check(app.clone(), true),
         "preferences.open" => emit_to_focused_window(app, "menu:open-preferences"),
+        // File menu
+        "file.new" => emit_to_focused_window(app, "menu:new-file"),
+        "file.open" => emit_to_focused_window(app, "menu:open-file"),
+        "file.open-folder" => emit_to_focused_window(app, "menu:open-folder"),
+        "file.save" => emit_to_focused_window(app, "menu:save"),
+        "file.reveal" => emit_to_focused_window(app, "menu:reveal"),
+        // View menu
+        "view.sidebar" => emit_to_focused_window(app, "menu:toggle-sidebar"),
+        "view.palette" => emit_to_focused_window(app, "menu:command-palette"),
+        "view.stats" => emit_to_focused_window(app, "menu:open-stats"),
+        "view.settings" => emit_to_focused_window(app, "menu:open-preferences"),
+        // GitHub menu
+        "github.push" => emit_to_focused_window(app, "menu:github-push"),
+        "github.fetch" => emit_to_focused_window(app, "menu:github-fetch"),
+        "github.changes" => emit_to_focused_window(app, "menu:github-changes"),
+        "github.signout" => emit_to_focused_window(app, "menu:github-signout"),
+        // Go menu
+        "go.back" => emit_to_focused_window(app, "menu:go-back"),
+        "go.forward" => emit_to_focused_window(app, "menu:go-forward"),
+        "go.file" => emit_to_focused_window(app, "menu:go-to-file"),
+        "go.workspace" => emit_to_focused_window(app, "menu:switch-workspace"),
         #[cfg(target_os = "macos")]
         "cli.toggle" => run_cli_toggle(app.clone()),
         _ => {}
@@ -570,8 +701,7 @@ pub fn run() {
             commands::settings::set_setting,
             commands::settings::reset_setting,
             commands::startup::get_startup_state,
-            commands::github_auth::github_begin_device_auth,
-            commands::github_auth::github_poll_device_auth,
+            commands::github_auth::github_save_token,
             commands::github_auth::github_signed_in,
             commands::github_auth::github_sign_out,
             commands::github_sync::github_list_repos,
@@ -580,6 +710,10 @@ pub fn run() {
             commands::github_sync::github_fetch,
             commands::github_sync::github_push,
             commands::github_sync::github_discard_local,
+            commands::github_sync::github_changed_files,
+            commands::github_sync::github_file_diff,
+            commands::github_sync::github_discard_file,
+            commands::github_sync::github_commit_history,
             #[cfg(target_os = "macos")]
             commands::shell_install::cli_status,
             #[cfg(target_os = "macos")]

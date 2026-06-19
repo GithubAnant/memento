@@ -1,4 +1,5 @@
 import { useActiveTab, useActiveTabId, useOpenTabs } from "@/hooks/use-tabs";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { pageKind } from "./page-kinds";
 import { EditorSearchOverlay } from "./editor-search-overlay";
 import { AnchorWarningBanner } from "./anchor-warning-banner";
@@ -24,7 +25,15 @@ function EditorArea({ showFooter = true }: EditorAreaProps) {
             location: typeof tab.location;
             isActive: boolean;
           }>;
-          return <Component key={tab.id} location={tab.location} isActive={isActive} />;
+          // Per-tab boundary: a crash in one page (especially a keepAlive one
+          // like Source Control / Stats that stays mounted while another tab is
+          // active) must not blank the whole editor area. Without this, the
+          // single app-level boundary would take down every tab at once.
+          return (
+            <ErrorBoundary key={tab.id}>
+              <Component location={tab.location} isActive={isActive} />
+            </ErrorBoundary>
+          );
         })}
       </div>
       {showFooter && activeTab

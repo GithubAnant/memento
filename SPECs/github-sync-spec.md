@@ -24,7 +24,7 @@ Turn Memento into a local editor over a GitHub-backed memory repo, where:
 - A **subtle status-bar sync control** shows sync state and pushes the user's
   local edits on click (commit all dirty files + push; fetch-then-retry if the
   remote moved).
-- Auth is **GitHub OAuth device flow**; the token is stored in the OS keychain.
+- Auth is a **GitHub Personal Access Token** (validated, then stored in the OS keychain).
 - Git transport is **embedded `git2` (libgit2)** — no shelling out to system
   `git`, no "is git installed" dependency, self-contained in the `.app`.
 
@@ -35,30 +35,38 @@ Turn Memento into a local editor over a GitHub-backed memory repo, where:
 - **Agent is the primary writer; the user mostly reads + occasionally edits.**
   Conflicts are rare. Fetch is expected to fast-forward; push is expected to
   succeed or need one fetch-retry.
-- Therefore: **no merge UI.** The only divergence path that needs handling is
-  "local can't fast-forward" → stop and surface an explicit choice, never
-  silently clobber an unpushed edit.
+- Therefore: **no merge-conflict UI.** The only divergence path that needs
+  handling is "local can't fast-forward" → stop and surface an explicit choice,
+  never silently clobber an unpushed edit. (A read-only diff _viewer_ for local
+  changes exists — see the Source Control view below — but there is no
+  three-way conflict resolver.)
+- A **Source Control view** (full tab, opened from the prominent top-right sync
+  button) lists per-file working-tree changes, shows each file's diff
+  (read-only CodeMirror merge of HEAD vs working tree), offers per-file discard,
+  and commits-all + pushes from a message box. A **Stats** tab renders a
+  commit-activity heatmap from local git history. Backend commands:
+  `github_changed_files`, `github_file_diff`, `github_discard_file`,
+  `github_commit_history` (all in `commands/github_sync.rs`).
 
 ## Design
 
 ### Auth (`commands/github_auth.rs`)
 
-- GitHub **OAuth device flow**: `POST /login/device/code` → show user code +
-  verification URL (open in browser) → poll `POST /login/oauth/access_token`
-  until authorized. Scope: `repo` (private repo read/write).
-- Requires a registered GitHub OAuth app **client id** (public, compiled in;
-  device flow has no client secret).
+- **Personal Access Token**: the user creates a classic PAT with the `repo`
+  scope (private repo read/write) and pastes it into the connect dialog. The
+  backend validates it with `GET /user` before storing — an invalid token is
+  rejected and nothing is persisted. No registered GitHub OAuth app (and no
+  compiled-in client id) is required.
 - Token stored in **OS keychain** via the `keyring` crate (service
   `com.memento.github`, account `oauth-token`). Never written to the settings
   store or any plaintext file. Read on demand (`crate::github`) — there is no
   in-memory cache, so the keychain is the single source of truth for
   signed-in state.
-- IPC: `github_begin_device_auth() -> { user_code, verification_uri, ... }`,
-  `github_poll_device_auth() -> { status }` (writes token to keychain on
-  success), `github_signed_in() -> bool`, `github_sign_out()` (deletes token).
-- An HTTP client is needed for the device-flow endpoints (`reqwest`, or
-  `ureq` for a lighter sync client). Git transport itself uses `git2`, not
-  HTTP.
+- IPC: `github_save_token(token) -> { login }` (validates, then writes token to
+  keychain on success), `github_signed_in() -> bool`,
+  `github_sign_out()` (deletes token).
+- An HTTP client (`ureq`) is used for the `GET /user` validation call. Git
+  transport itself uses `git2`, not HTTP.
 
 ### Repo selection + clone (`commands/github_sync.rs`)
 
@@ -74,7 +82,7 @@ Turn Memento into a local editor over a GitHub-backed memory repo, where:
   - Opens the clone as the workspace (existing restore/open path).
 - No separate sync config is persisted: the active memory repo is simply
   whichever workspace is open, and the `~/.memento/state.json` pointer records
-  the path for external agents. The OAuth token (keychain) is the only stored
+  the path for external agents. The access token (keychain) is the only stored
   secret. Sync state is derived live from `git2` on the open workspace, so
   there is nothing to keep coherent across a settings file.
 
@@ -135,7 +143,7 @@ Turn Memento into a local editor over a GitHub-backed memory repo, where:
   machine), `sync-control` (status-bar indicator/button), `divergence-banner`.
 - IPC wrappers live in `lib/tauri.ts` alongside the rest.
 - Onboarding flow (first run, no memory configured):
-  1. Prompt "Connect GitHub" → device flow (show code, open browser).
+  1. Prompt "Connect GitHub" → paste a Personal Access Token (validated).
   2. List private repos → user selects the memory repo.
   3. Clone to `~/Desktop/Memento/<repo>/` → write pointer file → open as
      workspace.

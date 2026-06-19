@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useSyncStore } from "@/stores/sync-store";
+import { useSyncStore, watchWorkspaceForSync } from "@/stores/sync-store";
 
 /// Auto-fetch cadence for the active workspace: a periodic interval plus
 /// window focus / tab visibility. All three funnel into `sync.fetch()`, whose
@@ -14,6 +14,15 @@ import { useSyncStore } from "@/stores/sync-store";
 const FETCH_INTERVAL_MS = 67_000;
 
 export function useSyncTriggers() {
+  // Track the active workspace and snapshot sync state on mount. Wired here
+  // (not as a sync-store module-load side effect) to avoid the workspace-store
+  // import-cycle TDZ that otherwise blocks the React mount.
+  useEffect(() => {
+    void useSyncStore.getState().refreshSignedIn();
+    void useSyncStore.getState().refreshStatus();
+    return watchWorkspaceForSync();
+  }, []);
+
   useEffect(() => {
     const fetchNow = () => {
       const { signedIn, isRepo } = useSyncStore.getState();

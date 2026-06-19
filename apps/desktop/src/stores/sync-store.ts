@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import * as tauri from "@/lib/tauri";
+import type { ChangedFile } from "@/lib/tauri";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 
 /// GitHub sync state for the active workspace.
@@ -26,6 +27,8 @@ interface SyncState {
   diverged: boolean;
   /** Last operation error (network/git), shown subtly; cleared on success. */
   error: string | null;
+  /** Per-file working-tree changes for the current workspace. */
+  changedFiles: ChangedFile[];
 
   refreshSignedIn: () => Promise<void>;
   /** Re-read repo status (branch + dirty count) for the current workspace.
@@ -39,6 +42,15 @@ interface SyncState {
   /** Discard local changes (hard reset to remote). Destructive — callers
    *  confirm first. */
   discardLocal: () => Promise<void>;
+  /** Re-read the per-file working-tree changes for the current workspace.
+   *  Not-a-repo (or no workspace) yields an empty list rather than an error. */
+  refreshChangedFiles: () => Promise<void>;
+  /** Discard local changes to a single file, then refresh status + changes.
+   *  Destructive — callers confirm first. */
+  discardFile: (path: string) => Promise<void>;
+  /** Sign out of GitHub: delete the keychain token and close the active
+   *  workspace so the app returns to the Connect/onboarding screen. */
+  signOut: () => Promise<void>;
 }
 
 function workspaceRoot(): string | null {
@@ -53,6 +65,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   dirtyCount: 0,
   diverged: false,
   error: null,
+  changedFiles: [],
 
   refreshSignedIn: async () => {
     try {
@@ -65,7 +78,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   refreshStatus: async () => {
     const root = workspaceRoot();
     if (!root) {
-      set({ isRepo: false });
+      set({ isRepo: false, changedFiles: [] });
       return;
     }
     try {
@@ -75,9 +88,10 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         branch: status.branch,
         dirtyCount: status.dirty_count,
       });
+      void get().refreshChangedFiles();
     } catch {
       // Not a git repo (Repository::open failed) — hide the control.
-      set({ isRepo: false });
+      set({ isRepo: false, changedFiles: [] });
     }
   },
 
@@ -137,15 +151,58 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       set({ phase: "idle" });
     }
   },
+
+  refreshChangedFiles: async () => {
+    const root = workspaceRoot();
+    if (!root) {
+      set({ changedFiles: [] });
+      return;
+    }
+    try {
+      set({ changedFiles: await tauri.githubChangedFiles(root) });
+    } catch {
+      // Not a git repo (or no working tree) — no changes to surface.
+      set({ changedFiles: [] });
+    }
+  },
+
+  discardFile: async (path: string) => {
+    const root = workspaceRoot();
+    if (!root) return;
+    try {
+      await tauri.githubDiscardFile(root, path);
+      await get().refreshStatus();
+      await get().refreshChangedFiles();
+    } catch (e) {
+      set({ error: String(e) });
+    }
+  },
+
+  signOut: async () => {
+    await tauri.githubSignOut();
+    await get().refreshSignedIn();
+    // Close the workspace so App falls back to the WelcomeScreen / Connect
+    // flow — signing out should land the user back in onboarding, not leave
+    // them staring at a now-orphaned repo.
+    useWorkspaceStore.getState().closeWorkspace();
+    set({ isRepo: false, changedFiles: [], dirtyCount: 0, diverged: false });
+  },
 }));
 
-// Re-evaluate sync state whenever the active workspace changes (open, switch,
-// or close). A fresh repo needs its signed-in + status snapshot before the
-// status-bar control can render meaningfully.
-let lastRoot = useWorkspaceStore.getState().root;
-useWorkspaceStore.subscribe((state) => {
-  if (state.root === lastRoot) return;
-  lastRoot = state.root;
-  void useSyncStore.getState().refreshSignedIn();
-  void useSyncStore.getState().refreshStatus();
-});
+/// Re-evaluate sync state whenever the active workspace changes (open, switch,
+/// or close). A fresh repo needs its signed-in + status snapshot before the
+/// status-bar control can render meaningfully.
+///
+/// This is wired at mount (see `useSyncTriggers`) rather than as a module-load
+/// side effect: sync-store sits in an import cycle with workspace-store, so
+/// touching `useWorkspaceStore` during module evaluation would hit it in its
+/// temporal dead zone and throw, blocking the whole React mount.
+export function watchWorkspaceForSync(): () => void {
+  let lastRoot = useWorkspaceStore.getState().root;
+  return useWorkspaceStore.subscribe((state) => {
+    if (state.root === lastRoot) return;
+    lastRoot = state.root;
+    void useSyncStore.getState().refreshSignedIn();
+    void useSyncStore.getState().refreshStatus();
+  });
+}

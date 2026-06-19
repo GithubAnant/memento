@@ -238,29 +238,17 @@ export function getStartupState(): Promise<StartupState> {
   return invoke("get_startup_state");
 }
 
-// GitHub auth (OAuth device flow). The token never crosses to the frontend;
-// it lives only in the OS keychain on the Rust side.
-export interface DeviceAuth {
-  device_code: string;
-  user_code: string;
-  verification_uri: string;
-  expires_in: number;
-  interval: number;
+// GitHub auth (Personal Access Token). The token is validated and stored in
+// the OS keychain on the Rust side; the frontend only holds it long enough to
+// submit it.
+export interface GitHubUser {
+  login: string;
 }
 
-/** One poll outcome. `authorized` → token stored; `pending` → keep polling at
- *  `interval` seconds; `failed` → terminal, show `message`. */
-export type PollResult =
-  | { status: "authorized" }
-  | { status: "pending"; interval: number }
-  | { status: "failed"; message: string };
-
-export function githubBeginDeviceAuth(): Promise<DeviceAuth> {
-  return invoke("github_begin_device_auth");
-}
-
-export function githubPollDeviceAuth(deviceCode: string): Promise<PollResult> {
-  return invoke("github_poll_device_auth", { deviceCode });
+/** Validate a PAT and, on success, persist it to the keychain. Rejects with a
+ *  message if the token is invalid (nothing is stored in that case). */
+export function githubSaveToken(token: string): Promise<GitHubUser> {
+  return invoke("github_save_token", { token });
 }
 
 export function githubSignedIn(): Promise<boolean> {
@@ -313,6 +301,40 @@ export function githubPush(workspacePath: string, message: string): Promise<Sync
 
 export function githubDiscardLocal(workspacePath: string): Promise<void> {
   return invoke("github_discard_local", { workspacePath });
+}
+
+export interface ChangedFile {
+  path: string;
+  status: "modified" | "added" | "deleted" | "untracked" | "renamed";
+}
+
+export interface FileDiff {
+  original: string;
+  modified: string;
+  status: string;
+}
+
+export interface CommitMeta {
+  id: string;
+  summary: string;
+  author: string;
+  timestamp_secs: number;
+}
+
+export function githubChangedFiles(workspacePath: string): Promise<ChangedFile[]> {
+  return invoke("github_changed_files", { workspacePath });
+}
+
+export function githubFileDiff(workspacePath: string, filePath: string): Promise<FileDiff> {
+  return invoke("github_file_diff", { workspacePath, filePath });
+}
+
+export function githubDiscardFile(workspacePath: string, filePath: string): Promise<void> {
+  return invoke("github_discard_file", { workspacePath, filePath });
+}
+
+export function githubCommitHistory(workspacePath: string, limit: number): Promise<CommitMeta[]> {
+  return invoke("github_commit_history", { workspacePath, limit });
 }
 
 // Window commands

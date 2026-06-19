@@ -30,7 +30,7 @@ use git2::{
 };
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::Manager;
 
 const COMMIT_AUTHOR: &str = "Memento";
@@ -66,6 +66,34 @@ pub struct SyncStatus {
 pub struct FetchResult {
     pub changed: bool,
     pub diverged: bool,
+}
+
+/// A single working-tree entry that differs from HEAD, for the source-control
+/// list. `status` is one of: "modified" | "added" | "deleted" | "untracked" |
+/// "renamed".
+#[derive(Debug, Serialize)]
+pub struct ChangedFile {
+    pub path: String,
+    pub status: String,
+}
+
+/// HEAD-vs-working-tree contents for one file, for the diff view. Either side
+/// is an empty string when the file is absent there (e.g. added/untracked has
+/// empty `original`; deleted has empty `modified`).
+#[derive(Debug, Serialize)]
+pub struct FileDiff {
+    pub original: String,
+    pub modified: String,
+    pub status: String,
+}
+
+/// One commit's metadata for the history view.
+#[derive(Debug, Serialize)]
+pub struct CommitMeta {
+    pub id: String,
+    pub summary: String,
+    pub author: String,
+    pub timestamp_secs: i64,
 }
 
 // ---------------------------------------------------------------------------
@@ -226,6 +254,160 @@ fn do_discard_local(repo: &Repository, token: &str) -> Result<(), AppError> {
         Some(CheckoutBuilder::new().force()),
     )?;
     Ok(())
+}
+
+/// Map a git2 status flag set to the frontend status string. Deletion and
+/// rename take precedence over modification; an untracked entry (WT_NEW with
+/// no staged INDEX_NEW) is "untracked", a staged new file is "added".
+fn status_label(status: git2::Status) -> &'static str {
+    use git2::Status;
+    if status.intersects(Status::WT_DELETED | Status::INDEX_DELETED) {
+        "deleted"
+    } else if status.intersects(Status::WT_RENAMED | Status::INDEX_RENAMED) {
+        "renamed"
+    } else if status.contains(Status::INDEX_NEW) {
+        "added"
+    } else if status.contains(Status::WT_NEW) {
+        "untracked"
+    } else {
+        "modified"
+    }
+}
+
+/// Build status options matching `dirty_count`: include untracked, exclude
+/// ignored. Shared so the changed-files list and the dirty count never drift.
+fn status_options() -> StatusOptions {
+    let mut opts = StatusOptions::new();
+    opts.include_untracked(true).include_ignored(false);
+    opts
+}
+
+/// Status string for a single path, or `None` if the path is unchanged vs HEAD.
+fn status_for_path(repo: &Repository, file_path: &str) -> Result<Option<String>, AppError> {
+    let mut opts = status_options();
+    let statuses = repo.statuses(Some(&mut opts))?;
+    for entry in statuses.iter() {
+        if entry.status().is_ignored() || entry.status() == git2::Status::CURRENT {
+            continue;
+        }
+        if entry.path().ok() == Some(file_path) {
+            return Ok(Some(status_label(entry.status()).to_string()));
+        }
+    }
+    Ok(None)
+}
+
+/// List every working-tree entry differing from HEAD, mapped to a status label.
+fn changed_files_impl(repo: &Repository) -> Result<Vec<ChangedFile>, AppError> {
+    let mut opts = status_options();
+    let statuses = repo.statuses(Some(&mut opts))?;
+    let mut out = Vec::new();
+    for entry in statuses.iter() {
+        let status = entry.status();
+        if status.is_ignored() || status == git2::Status::CURRENT {
+            continue;
+        }
+        out.push(ChangedFile {
+            path: entry.path().unwrap_or_default().to_string(),
+            status: status_label(status).to_string(),
+        });
+    }
+    Ok(out)
+}
+
+/// Contents of `file_path` in the HEAD commit's tree, or empty string if it is
+/// not present at HEAD (added/untracked) or there is no HEAD yet.
+fn head_contents(repo: &Repository, file_path: &str) -> Result<String, AppError> {
+    let head_commit = match repo.head() {
+        Ok(head) => head.peel_to_commit()?,
+        // No HEAD (unborn branch / empty repo): nothing at HEAD.
+        Err(_) => return Ok(String::new()),
+    };
+    let tree = head_commit.tree()?;
+    match tree.get_path(Path::new(file_path)) {
+        Ok(entry) => {
+            let object = entry.to_object(repo)?;
+            match object.as_blob() {
+                Some(blob) => Ok(String::from_utf8_lossy(blob.content()).into_owned()),
+                None => Ok(String::new()),
+            }
+        }
+        // Path absent at HEAD (added/untracked) → empty original, not an error.
+        Err(_) => Ok(String::new()),
+    }
+}
+
+/// HEAD vs working-tree contents + status for one path.
+fn file_diff_impl(repo: &Repository, file_path: &str) -> Result<FileDiff, AppError> {
+    let original = head_contents(repo, file_path)?;
+
+    let modified = match repo.workdir() {
+        Some(workdir) => {
+            let full = workdir.join(file_path);
+            match std::fs::read(&full) {
+                Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
+                // File deleted/missing on disk → empty modified side.
+                Err(_) => String::new(),
+            }
+        }
+        None => String::new(),
+    };
+
+    let status = status_for_path(repo, file_path)?.unwrap_or_else(|| "modified".to_string());
+
+    Ok(FileDiff {
+        original,
+        modified,
+        status,
+    })
+}
+
+/// Revert exactly one path. Tracked files are checked out from HEAD (force,
+/// path-scoped); a purely untracked file is removed from disk. Other paths are
+/// never touched.
+fn discard_file_impl(repo: &Repository, file_path: &str) -> Result<(), AppError> {
+    let label = status_for_path(repo, file_path)?;
+
+    if label.as_deref() == Some("untracked") {
+        if let Some(workdir) = repo.workdir() {
+            let full = workdir.join(file_path);
+            if full.exists() {
+                std::fs::remove_file(&full)?;
+            }
+        }
+        return Ok(());
+    }
+
+    // Tracked (modified/added/deleted/renamed): restore just this path from HEAD.
+    let mut checkout = CheckoutBuilder::new();
+    checkout.force().path(file_path);
+    repo.checkout_head(Some(&mut checkout))?;
+    Ok(())
+}
+
+/// Walk commits from HEAD (newest first), up to `limit`. Empty repo → empty Vec.
+fn commit_history_impl(repo: &Repository, limit: usize) -> Result<Vec<CommitMeta>, AppError> {
+    let mut revwalk = repo.revwalk()?;
+    // No HEAD yet (unborn branch): no history rather than an error.
+    if revwalk.push_head().is_err() {
+        return Ok(Vec::new());
+    }
+
+    let mut out = Vec::new();
+    for oid in revwalk {
+        if out.len() >= limit {
+            break;
+        }
+        let oid = oid?;
+        let commit = repo.find_commit(oid)?;
+        out.push(CommitMeta {
+            id: oid.to_string(),
+            summary: commit.summary().ok().flatten().unwrap_or("").to_string(),
+            author: commit.author().name().unwrap_or("").to_string(),
+            timestamp_secs: commit.time().seconds(),
+        });
+    }
+    Ok(out)
 }
 
 // ---------------------------------------------------------------------------
@@ -407,4 +589,228 @@ pub async fn github_discard_local(workspace_path: String) -> Result<(), AppError
     })
     .await
     .map_err(|e| AppError::Io(e.to_string()))?
+}
+
+/// List working-tree files that differ from HEAD, each with a status label,
+/// for the source-control change list.
+#[tauri::command]
+pub async fn github_changed_files(workspace_path: String) -> Result<Vec<ChangedFile>, AppError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo = open_repo(&workspace_path)?;
+        changed_files_impl(&repo)
+    })
+    .await
+    .map_err(|e| AppError::Io(e.to_string()))?
+}
+
+/// HEAD vs working-tree contents (plus status) for one file, for the diff view.
+#[tauri::command]
+pub async fn github_file_diff(
+    workspace_path: String,
+    file_path: String,
+) -> Result<FileDiff, AppError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo = open_repo(&workspace_path)?;
+        file_diff_impl(&repo, &file_path)
+    })
+    .await
+    .map_err(|e| AppError::Io(e.to_string()))?
+}
+
+/// Discard local changes to exactly one file (revert from HEAD or delete if
+/// untracked). Destructive but path-scoped; never touches other files.
+#[tauri::command]
+pub async fn github_discard_file(
+    workspace_path: String,
+    file_path: String,
+) -> Result<(), AppError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo = open_repo(&workspace_path)?;
+        discard_file_impl(&repo, &file_path)
+    })
+    .await
+    .map_err(|e| AppError::Io(e.to_string()))?
+}
+
+/// Commit history from HEAD (newest first), capped at `limit`, for the history
+/// view. An empty repo yields an empty list.
+#[tauri::command]
+pub async fn github_commit_history(
+    workspace_path: String,
+    limit: usize,
+) -> Result<Vec<CommitMeta>, AppError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo = open_repo(&workspace_path)?;
+        commit_history_impl(&repo, limit)
+    })
+    .await
+    .map_err(|e| AppError::Io(e.to_string()))?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use git2::{Repository, Signature};
+    use std::fs;
+    use std::path::Path;
+    use tempfile::TempDir;
+
+    /// Init a repo in a temp dir, write `README.md`, and make an initial commit.
+    /// Returns the temp dir (kept alive) and the opened repo.
+    fn init_repo_with_commit() -> (TempDir, Repository) {
+        let dir = TempDir::new().unwrap();
+        let repo = Repository::init(dir.path()).unwrap();
+
+        fs::write(dir.path().join("README.md"), "hello\n").unwrap();
+        commit_all(&repo, "initial commit");
+
+        (dir, repo)
+    }
+
+    /// Stage everything and commit on top of HEAD (or as the root commit).
+    fn commit_all(repo: &Repository, message: &str) {
+        let mut index = repo.index().unwrap();
+        index
+            .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
+            .unwrap();
+        index.write().unwrap();
+        let tree_oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_oid).unwrap();
+        let sig = Signature::now("Tester", "tester@example.com").unwrap();
+
+        let parents = match repo.head() {
+            Ok(head) => vec![head.peel_to_commit().unwrap()],
+            Err(_) => Vec::new(),
+        };
+        let parent_refs: Vec<&git2::Commit> = parents.iter().collect();
+        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parent_refs)
+            .unwrap();
+    }
+
+    fn workdir(repo: &Repository) -> &Path {
+        repo.workdir().unwrap()
+    }
+
+    #[test]
+    fn changed_files_reports_untracked() {
+        let (_dir, repo) = init_repo_with_commit();
+        // Clean tree right after commit.
+        assert!(changed_files_impl(&repo).unwrap().is_empty());
+
+        fs::write(workdir(&repo).join("note.md"), "new\n").unwrap();
+        let changed = changed_files_impl(&repo).unwrap();
+        assert_eq!(changed.len(), 1);
+        assert_eq!(changed[0].path, "note.md");
+        assert_eq!(changed[0].status, "untracked");
+    }
+
+    #[test]
+    fn changed_files_reports_modified_and_deleted() {
+        let (_dir, repo) = init_repo_with_commit();
+
+        fs::write(workdir(&repo).join("README.md"), "hello world\n").unwrap();
+        let changed = changed_files_impl(&repo).unwrap();
+        assert_eq!(changed.len(), 1);
+        assert_eq!(changed[0].path, "README.md");
+        assert_eq!(changed[0].status, "modified");
+
+        fs::remove_file(workdir(&repo).join("README.md")).unwrap();
+        let changed = changed_files_impl(&repo).unwrap();
+        assert_eq!(changed[0].status, "deleted");
+    }
+
+    #[test]
+    fn commit_history_returns_commits_newest_first() {
+        let (_dir, repo) = init_repo_with_commit();
+        fs::write(workdir(&repo).join("README.md"), "second\n").unwrap();
+        commit_all(&repo, "second commit");
+
+        let history = commit_history_impl(&repo, 10).unwrap();
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].summary, "second commit");
+        assert_eq!(history[1].summary, "initial commit");
+        assert_eq!(history[0].author, "Tester");
+        assert!(history[0].timestamp_secs > 0);
+        assert!(history[1].timestamp_secs <= history[0].timestamp_secs);
+
+        // Limit is respected.
+        let limited = commit_history_impl(&repo, 1).unwrap();
+        assert_eq!(limited.len(), 1);
+        assert_eq!(limited[0].summary, "second commit");
+    }
+
+    #[test]
+    fn commit_history_empty_repo_is_empty() {
+        let dir = TempDir::new().unwrap();
+        let repo = Repository::init(dir.path()).unwrap();
+        assert!(commit_history_impl(&repo, 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn file_diff_for_modified_file() {
+        let (_dir, repo) = init_repo_with_commit();
+        fs::write(workdir(&repo).join("README.md"), "hello world\n").unwrap();
+
+        let diff = file_diff_impl(&repo, "README.md").unwrap();
+        assert_eq!(diff.original, "hello\n");
+        assert_eq!(diff.modified, "hello world\n");
+        assert_eq!(diff.status, "modified");
+    }
+
+    #[test]
+    fn file_diff_for_untracked_has_empty_original() {
+        let (_dir, repo) = init_repo_with_commit();
+        fs::write(workdir(&repo).join("note.md"), "fresh\n").unwrap();
+
+        let diff = file_diff_impl(&repo, "note.md").unwrap();
+        assert_eq!(diff.original, "");
+        assert_eq!(diff.modified, "fresh\n");
+        assert_eq!(diff.status, "untracked");
+    }
+
+    #[test]
+    fn file_diff_for_deleted_has_empty_modified() {
+        let (_dir, repo) = init_repo_with_commit();
+        fs::remove_file(workdir(&repo).join("README.md")).unwrap();
+
+        let diff = file_diff_impl(&repo, "README.md").unwrap();
+        assert_eq!(diff.original, "hello\n");
+        assert_eq!(diff.modified, "");
+        assert_eq!(diff.status, "deleted");
+    }
+
+    #[test]
+    fn discard_file_reverts_tracked_and_deletes_untracked() {
+        let (_dir, repo) = init_repo_with_commit();
+
+        // Modified tracked file is reverted to HEAD contents.
+        fs::write(workdir(&repo).join("README.md"), "changed\n").unwrap();
+        discard_file_impl(&repo, "README.md").unwrap();
+        let restored = fs::read_to_string(workdir(&repo).join("README.md")).unwrap();
+        assert_eq!(restored, "hello\n");
+
+        // Untracked file is removed from disk.
+        let note = workdir(&repo).join("note.md");
+        fs::write(&note, "temp\n").unwrap();
+        discard_file_impl(&repo, "note.md").unwrap();
+        assert!(!note.exists());
+    }
+
+    #[test]
+    fn discard_file_leaves_other_files_untouched() {
+        let (_dir, repo) = init_repo_with_commit();
+        fs::write(workdir(&repo).join("README.md"), "changed\n").unwrap();
+        let other = workdir(&repo).join("other.md");
+        fs::write(&other, "keep me\n").unwrap();
+
+        discard_file_impl(&repo, "README.md").unwrap();
+
+        // README reverted, but the untracked other.md must remain.
+        assert_eq!(
+            fs::read_to_string(workdir(&repo).join("README.md")).unwrap(),
+            "hello\n"
+        );
+        assert!(other.exists());
+        assert_eq!(fs::read_to_string(&other).unwrap(), "keep me\n");
+    }
 }

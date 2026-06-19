@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { useWorkspace } from "@/hooks/use-workspace";
+import { useSyncStore } from "@/stores/sync-store";
 import * as tauri from "@/lib/tauri";
 import {
   showNativeContextMenu,
@@ -56,6 +57,17 @@ export function WorkspaceSwitcher() {
         text: "Close Workspace",
         action: () => {
           closeWorkspace();
+        },
+      });
+    }
+    if (useSyncStore.getState().signedIn) {
+      items.push({ kind: "separator" });
+      items.push({
+        kind: "item",
+        id: "github-signout",
+        text: "Sign out of GitHub",
+        action: () => {
+          void useSyncStore.getState().signOut();
         },
       });
     }

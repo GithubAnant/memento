@@ -11,7 +11,6 @@ import { useOpenDrop } from "./hooks/use-open-drop";
 import { useSyncTriggers } from "./hooks/use-sync-triggers";
 import "./lib/global-recents";
 import "./lib/standalone-watch";
-import "./stores/sync-store";
 import "./App.css";
 
 function App() {

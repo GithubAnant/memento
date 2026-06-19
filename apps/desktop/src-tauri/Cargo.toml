@@ -14,6 +14,13 @@ edition = "2021"
 name = "desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+# Name the binary "Memento" so the dock/process label reads "Memento" in dev
+# (`tauri dev` runs the raw Cargo binary, not the bundled .app, so the binary
+# name is what macOS shows). Matches `mainBinaryName` in tauri.conf.json.
+[[bin]]
+name = "Memento"
+path = "src/main.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

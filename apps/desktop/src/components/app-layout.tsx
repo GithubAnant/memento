@@ -3,6 +3,7 @@ import { Sidebar } from "./sidebar";
 import { EditorArea } from "./editor-area";
 import { EditorTabs } from "./editor-area/editor-tabs";
 import { SidebarToggleButton } from "./sidebar/sidebar-toggle-button";
+import { SyncButton } from "@/components/github/sync-button";
 import { CompactFileLayout } from "./compact-file-layout";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useWorkspaceChromeMode } from "@/hooks/use-workspace";
@@ -126,10 +127,19 @@ function WorkspaceLayout() {
         <SidebarToggleButton />
       </div>
       <div
+        className="pointer-events-auto absolute right-0 top-0 z-50 flex items-center"
+        style={{
+          height: "calc(var(--chrome-control-height) + var(--chrome-control-padding) * 2)",
+          padding: "var(--chrome-control-padding) 12px",
+        }}
+      >
+        <SyncButton />
+      </div>
+      <div
         className="pointer-events-none absolute top-0 z-40"
         style={{
           left: tabChromeLeft,
-          right: 12,
+          right: 152,
           transition: isSidebarDragging ? "none" : "left 140ms ease-out",
         }}
       >
