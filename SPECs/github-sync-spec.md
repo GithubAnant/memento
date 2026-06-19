@@ -49,8 +49,10 @@ Turn Memento into a local editor over a GitHub-backed memory repo, where:
 - Requires a registered GitHub OAuth app **client id** (public, compiled in;
   device flow has no client secret).
 - Token stored in **OS keychain** via the `keyring` crate (service
-  `com.memento`, account `github-token`). Never written to the settings store
-  or any plaintext file.
+  `com.memento.github`, account `oauth-token`). Never written to the settings
+  store or any plaintext file. Read on demand (`crate::github`) — there is no
+  in-memory cache, so the keychain is the single source of truth for
+  signed-in state.
 - IPC: `github_begin_device_auth() -> { user_code, verification_uri, ... }`,
   `github_poll_device_auth() -> { status }` (writes token to keychain on
   success), `github_signed_in() -> bool`, `github_sign_out()` (deletes token).
@@ -70,9 +72,11 @@ Turn Memento into a local editor over a GitHub-backed memory repo, where:
   - Writes the pointer file `~/.memento/state.json`:
     `{ "memoryPath": "<abs clone path>", "repo": "<owner/name>" }`.
   - Opens the clone as the workspace (existing restore/open path).
-- Non-secret sync config (active repo full name, clone path, last-fetch time)
-  is persisted in the existing settings store (global scope). Only the token
-  lives in the keychain.
+- No separate sync config is persisted: the active memory repo is simply
+  whichever workspace is open, and the `~/.memento/state.json` pointer records
+  the path for external agents. The OAuth token (keychain) is the only stored
+  secret. Sync state is derived live from `git2` on the open workspace, so
+  there is nothing to keep coherent across a settings file.
 
 ### Fetch (auto + manual)
 
@@ -119,11 +123,17 @@ Turn Memento into a local editor over a GitHub-backed memory repo, where:
     `offline`/`error` (subtle warning).
   - Dirty count derives from `git2` status (working tree vs HEAD).
 
-### Frontend (`src/lib/github-sync.ts` + status-bar component)
+### Frontend
 
-- A small Zustand slice holds sync state (`signedIn`, `repo`, `status`,
-  `dirtyCount`, `lastFetch`, `error`). Side effects (interval, focus listener)
-  owned in one place per the side-effect-timing guidelines.
+- `stores/sync-store.ts` — Zustand slice holding sync state (`signedIn`,
+  `isRepo`, `phase`, `branch`, `dirtyCount`, `diverged`, `error`); a
+  module-level `useWorkspaceStore` subscription re-seeds it on workspace
+  change.
+- `hooks/use-sync-triggers.ts` — owns the interval + focus + visibility
+  listeners (side effects in one place per the guidelines).
+- `components/github/` — `connect-store` + `connect-dialog` (onboarding state
+  machine), `sync-control` (status-bar indicator/button), `divergence-banner`.
+- IPC wrappers live in `lib/tauri.ts` alongside the rest.
 - Onboarding flow (first run, no memory configured):
   1. Prompt "Connect GitHub" → device flow (show code, open browser).
   2. List private repos → user selects the memory repo.
