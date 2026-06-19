@@ -2,13 +2,16 @@ import { AppLayout } from "./components/app-layout";
 import { CommandPalette } from "./components/command-palette";
 import { WelcomeScreen } from "./components/welcome";
 import { WindowTitle } from "./components/window-title";
+import { ConnectDialog } from "./components/github/connect-dialog";
 import { useWorkspace, useIsStartupResolved } from "./hooks/use-workspace";
 import { useFileWatcher } from "./hooks/use-file-watcher";
 import { useKeyboardShortcuts } from "./hooks/use-keyboard-shortcuts";
 import { useMenuEvents } from "./hooks/use-menu-events";
 import { useOpenDrop } from "./hooks/use-open-drop";
+import { useSyncTriggers } from "./hooks/use-sync-triggers";
 import "./lib/global-recents";
 import "./lib/standalone-watch";
+import "./stores/sync-store";
 import "./App.css";
 
 function App() {
@@ -19,6 +22,7 @@ function App() {
   useKeyboardShortcuts();
   useMenuEvents();
   useOpenDrop();
+  useSyncTriggers();
 
   if (!isStartupResolved) {
     return null;
@@ -31,6 +35,7 @@ function App() {
         <WindowTitle />
         <WelcomeScreen />
         <CommandPalette />
+        <ConnectDialog />
       </>
     );
   }
@@ -40,6 +45,7 @@ function App() {
       <WindowTitle />
       <AppLayout />
       <CommandPalette />
+      <ConnectDialog />
     </>
   );
 }

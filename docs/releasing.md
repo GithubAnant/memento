@@ -8,6 +8,7 @@ Before bumping anything:
 
 - `vp check` and `vp test` pass.
 - The `CHANGELOG.md` entry for this release already exists. If it doesn't, write it first as a separate commit — release commits should only touch version fields.
+- `GITHUB_CLIENT_ID` is exported in the build environment. The GitHub sync feature reads it at compile time via `option_env!` (see `src-tauri/src/github.rs`); without it, "Connect GitHub" sends a placeholder client id and device-flow auth fails. Register a GitHub OAuth app with **Enable Device Flow** checked, then `export GITHUB_CLIENT_ID=<id>` before running `distribute.sh`. The client id is public (device flow has no secret), so it can also be committed to the build config later if preferred.
 
 `scripts/distribute.sh` enforces the rest itself: it refuses to run unless you're on `master` with a clean working tree, fast-forward of `origin/master`, and the target tag doesn't already exist locally or on origin.
 

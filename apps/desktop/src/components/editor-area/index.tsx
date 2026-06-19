@@ -2,6 +2,7 @@ import { useActiveTab, useActiveTabId, useOpenTabs } from "@/hooks/use-tabs";
 import { pageKind } from "./page-kinds";
 import { EditorSearchOverlay } from "./editor-search-overlay";
 import { AnchorWarningBanner } from "./anchor-warning-banner";
+import { DivergenceBanner } from "@/components/github/divergence-banner";
 
 interface EditorAreaProps {
   showFooter?: boolean;
@@ -31,6 +32,7 @@ function EditorArea({ showFooter = true }: EditorAreaProps) {
         : null}
       <EditorSearchOverlay />
       <AnchorWarningBanner />
+      <DivergenceBanner />
     </div>
   );
 }

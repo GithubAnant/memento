@@ -238,6 +238,83 @@ export function getStartupState(): Promise<StartupState> {
   return invoke("get_startup_state");
 }
 
+// GitHub auth (OAuth device flow). The token never crosses to the frontend;
+// it lives only in the OS keychain on the Rust side.
+export interface DeviceAuth {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  expires_in: number;
+  interval: number;
+}
+
+/** One poll outcome. `authorized` → token stored; `pending` → keep polling at
+ *  `interval` seconds; `failed` → terminal, show `message`. */
+export type PollResult =
+  | { status: "authorized" }
+  | { status: "pending"; interval: number }
+  | { status: "failed"; message: string };
+
+export function githubBeginDeviceAuth(): Promise<DeviceAuth> {
+  return invoke("github_begin_device_auth");
+}
+
+export function githubPollDeviceAuth(deviceCode: string): Promise<PollResult> {
+  return invoke("github_poll_device_auth", { deviceCode });
+}
+
+export function githubSignedIn(): Promise<boolean> {
+  return invoke("github_signed_in");
+}
+
+export function githubSignOut(): Promise<void> {
+  return invoke("github_sign_out");
+}
+
+// GitHub sync (clone + fetch + push over embedded git2).
+export interface RepoInfo {
+  full_name: string;
+  private: boolean;
+  default_branch: string;
+  updated_at: string;
+}
+
+export interface SyncStatus {
+  branch: string;
+  dirty_count: number;
+}
+
+export interface FetchResult {
+  changed: boolean;
+  diverged: boolean;
+}
+
+export function githubListRepos(): Promise<RepoInfo[]> {
+  return invoke("github_list_repos");
+}
+
+/** Clone `owner/repo` to `~/Desktop/Memento/<repo>/`, write the agent pointer
+ *  file, and return the local path to open as a workspace. */
+export function githubCloneRepo(fullName: string): Promise<{ path: string }> {
+  return invoke("github_clone_repo", { fullName });
+}
+
+export function githubSyncStatus(workspacePath: string): Promise<SyncStatus> {
+  return invoke("github_sync_status", { workspacePath });
+}
+
+export function githubFetch(workspacePath: string): Promise<FetchResult> {
+  return invoke("github_fetch", { workspacePath });
+}
+
+export function githubPush(workspacePath: string, message: string): Promise<SyncStatus> {
+  return invoke("github_push", { workspacePath, message });
+}
+
+export function githubDiscardLocal(workspacePath: string): Promise<void> {
+  return invoke("github_discard_local", { workspacePath });
+}
+
 // Window commands
 export function showMainWindow(): Promise<void> {
   return getCurrentWindow().show();

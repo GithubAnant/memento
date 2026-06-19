@@ -3,6 +3,7 @@ mod config;
 #[cfg(target_os = "macos")]
 mod dock_menu;
 mod error;
+mod github;
 mod ignore;
 pub mod open_target;
 mod state;
@@ -569,6 +570,16 @@ pub fn run() {
             commands::settings::set_setting,
             commands::settings::reset_setting,
             commands::startup::get_startup_state,
+            commands::github_auth::github_begin_device_auth,
+            commands::github_auth::github_poll_device_auth,
+            commands::github_auth::github_signed_in,
+            commands::github_auth::github_sign_out,
+            commands::github_sync::github_list_repos,
+            commands::github_sync::github_clone_repo,
+            commands::github_sync::github_sync_status,
+            commands::github_sync::github_fetch,
+            commands::github_sync::github_push,
+            commands::github_sync::github_discard_local,
             #[cfg(target_os = "macos")]
             commands::shell_install::cli_status,
             #[cfg(target_os = "macos")]
