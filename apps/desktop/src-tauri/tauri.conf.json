@@ -43,7 +43,6 @@
     "targets": "all",
     "createUpdaterArtifacts": true,
     "macOS": {
-      "infoPlist": "Info.plist",
       "entitlements": "./Entitlements.plist",
       "signingIdentity": null,
       "hardenedRuntime": true,
