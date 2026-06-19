@@ -56,7 +56,6 @@ overrides:
   serialize-javascript: 7.0.5
   vite: "catalog:"
   vitest: "catalog:"
-  "website>vite": "npm:vite@^8.0.16"
   ws: 8.20.1
 peerDependencyRules:
   allowAny:
