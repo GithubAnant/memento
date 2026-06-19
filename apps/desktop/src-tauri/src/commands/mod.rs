@@ -1,4 +1,6 @@
 pub mod fs;
+pub mod github_auth;
+pub mod github_sync;
 pub mod images;
 pub mod recents;
 pub mod search;

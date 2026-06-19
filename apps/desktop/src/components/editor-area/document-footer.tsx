@@ -1,4 +1,5 @@
 import { useFileStats } from "@/hooks/use-tabs";
+import { SyncControl } from "@/components/github/sync-control";
 
 function FooterMetric({ label, value }: { label: string; value: number }) {
   return (
@@ -14,6 +15,7 @@ export function DocumentFooter({ filePath }: { filePath: string }) {
 
   return (
     <div className="flex absolute bottom-0 w-full z-10 h-11 shrink-0 items-center justify-end gap-5 px-6 text-[13px] leading-[1.15] text-[var(--text-muted)] md:px-8">
+      <SyncControl />
       <FooterMetric label="words" value={stats.words} />
       <FooterMetric label="characters" value={stats.characters} />
       <FooterMetric label="paragraphs" value={stats.paragraphs} />

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-19
+
+- Add GitHub sync so Memento can be a local editor over a private GitHub repo (e.g. an AI agent's memory layer). Connect your account via GitHub OAuth device flow — the access token is stored in the macOS Keychain, never on disk or in `.git/config`. Pick a repo from the welcome screen and it clones to `~/Desktop/Memento/<repo>/`, opens as the workspace, and writes a `~/.memento/state.json` pointer so external agents/scripts can find the markdown without git or a token.
+- Keep the local copy fresh automatically: the app fetches and fast-forwards on an interval, on window focus, and on tab visibility. Fast-forward only runs when the working tree is clean, so a fetched change reloads the open editor as fresh remote content without touching in-progress edits.
+- Add a subtle status-bar sync control that shows sync state (synced / N to push / fetching / pushing / diverged) and pushes all local changes in one commit on click, fetching-and-retrying if the remote moved. If the local copy diverged and can't fast-forward, a banner offers Push or (confirm-gated) Discard local — changes are never silently overwritten.
+- Transport uses embedded libgit2 (`git2`), so there is no dependency on a system `git`. Adds the `com.apple.security.network.client` entitlement required for outbound HTTPS under the hardened runtime.
+
 ## 2026-06-16
 
 - Drag files and folders in the sidebar's `Everything` tree to move them. Drop onto a folder to move inside it, onto a file to move into that file's folder, or onto empty tree space to move to the workspace root; a multi-selection moves together. Open tabs, pinned files, and expanded folders follow the move, and name collisions are reported instead of overwriting. Dragging uses pointer events so it coexists with the existing Finder-drop-to-open behavior.
