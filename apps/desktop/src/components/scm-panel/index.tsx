@@ -3,9 +3,10 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Undo02Icon } from "@hugeicons/core-free-icons";
 import { useSyncStore } from "@/stores/sync-store";
 import { useWorkspaceStore } from "@/stores/workspace-store";
-import type { ChangedFile } from "@/lib/tauri";
+import { githubCommitHistory, type ChangedFile, type CommitMeta } from "@/lib/tauri";
 import { GithubIcon } from "@/components/icons/github-icon";
 import { DiffView } from "./diff-view";
+import { CommitHistory } from "./commit-history";
 
 /** Status letter + color for a changed file. */
 const STATUS_META: Record<ChangedFile["status"], { letter: string; color: string }> = {
@@ -106,12 +107,34 @@ export function ScmPanel({ isActive }: { isActive: boolean }) {
   // Tracks whether the user has typed their own commit message; until then the
   // default message tracks the dirty-file count.
   const [messageDirty, setMessageDirty] = useState(false);
+  // Which body to show: working-tree changes (default) or commit history.
+  const [view, setView] = useState<"changes" | "history">("changes");
+  const [commits, setCommits] = useState<CommitMeta[] | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   // Refresh the working-tree changes on mount and whenever the tab is
   // (re-)activated, since keepAlive keeps this mounted across tab switches.
   useEffect(() => {
     if (isActive) void useSyncStore.getState().refreshChangedFiles();
   }, [isActive]);
+
+  // Load commit history lazily the first time History is opened (and refresh on
+  // each activation while in history view so a fresh push shows up).
+  useEffect(() => {
+    if (!isActive || view !== "history" || !root) return;
+    let cancelled = false;
+    setHistoryError(null);
+    githubCommitHistory(root, 1000)
+      .then((c) => {
+        if (!cancelled) setCommits(c);
+      })
+      .catch((e) => {
+        if (!cancelled) setHistoryError(String(e));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isActive, view, root]);
 
   const defaultMessage = useMemo(() => {
     const n = changedFiles.length;
@@ -153,13 +176,27 @@ export function ScmPanel({ isActive }: { isActive: boolean }) {
                 {branch}
               </span>
             ) : null}
-            <span className="ml-auto text-[12px] text-[var(--text-muted)]">
-              {changedFiles.length === 0
-                ? "No changes"
-                : `${changedFiles.length} changed file${changedFiles.length === 1 ? "" : "s"}`}
-            </span>
+            <div className="ml-auto flex items-center gap-3">
+              <div className="flex items-center gap-0.5 rounded-lg bg-[var(--surface-subtle)] p-0.5">
+                <SegBtn active={view === "changes"} onClick={() => setView("changes")}>
+                  Changes
+                </SegBtn>
+                <SegBtn active={view === "history"} onClick={() => setView("history")}>
+                  History
+                </SegBtn>
+              </div>
+              <span className="text-[12px] text-[var(--text-muted)]">
+                {view === "history"
+                  ? commits
+                    ? `${commits.length} commit${commits.length === 1 ? "" : "s"}`
+                    : ""
+                  : changedFiles.length === 0
+                    ? "No changes"
+                    : `${changedFiles.length} changed file${changedFiles.length === 1 ? "" : "s"}`}
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className={`flex items-center gap-2 ${view === "history" ? "hidden" : ""}`}>
             <input
               type="text"
               value={effectiveMessage}
@@ -169,13 +206,13 @@ export function ScmPanel({ isActive }: { isActive: boolean }) {
               }}
               placeholder="Commit message"
               disabled={busy}
-              className="min-w-0 flex-1 rounded-md border border-[var(--line-subtler)] bg-[var(--surface-input)] px-3 py-1.5 text-[13px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] disabled:opacity-60"
+              className="min-w-0 flex-1 rounded-lg border border-[var(--line-subtler)] bg-transparent px-3 py-2 text-[13px] text-[var(--text-primary)] outline-none transition-colors placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] disabled:opacity-60"
             />
             <button
               type="button"
               onClick={() => void handlePush()}
               disabled={busy || changedFiles.length === 0}
-              className="flex shrink-0 items-center gap-1.5 rounded-md bg-[var(--accent)] px-4 py-1.5 text-[13px] font-medium text-white transition-opacity disabled:opacity-50"
+              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2 text-[13px] font-medium text-white transition-opacity disabled:opacity-50"
             >
               <GithubIcon size={15} />
               {phase === "pushing" ? "Pushing…" : "Push"}
@@ -183,7 +220,9 @@ export function ScmPanel({ isActive }: { isActive: boolean }) {
           </div>
         </header>
 
-        {changedFiles.length === 0 ? (
+        {view === "history" ? (
+          <CommitHistory commits={commits} error={historyError} />
+        ) : changedFiles.length === 0 ? (
           <div className="flex flex-1 items-center justify-center text-[13px] text-[var(--text-muted)]">
             No changes — you're all caught up.
           </div>
@@ -207,5 +246,30 @@ export function ScmPanel({ isActive }: { isActive: boolean }) {
         )}
       </div>
     </div>
+  );
+}
+
+/** One segment of the Changes/History toggle. */
+function SegBtn({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors ${
+        active
+          ? "bg-[var(--surface-primary)] text-[var(--text-primary)] shadow-sm"
+          : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
