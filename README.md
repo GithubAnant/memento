@@ -14,6 +14,8 @@ So I pointed Poke at a private GitHub repo. Now it has a place to write — save
 
 Memento is the editor for that repo — an Obsidian-style app where the workspace _is_ a git repo, syncing as the agent writes. The agent is the primary writer; I mostly read, and sometimes edit.
 
+> **Fun fact:** _memento_ is Latin for "remember" — fitting for an app whose whole job is helping something remember.
+
 See [`SPECs/github-sync-spec.md`](./SPECs/github-sync-spec.md) for how the sync layer works.
 
 ## What it does

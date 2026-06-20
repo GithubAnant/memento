@@ -98,14 +98,14 @@ export function Story() {
         <div className="shell pt-[clamp(48px,7vw,110px)] pb-[clamp(80px,12vw,200px)]">
           <h2
             id="about-label"
-            className="max-w-[18ch] font-sans text-[clamp(2.75rem,7vw,6rem)] font-semibold leading-[1.0] tracking-[-0.03em] text-[color:var(--color-paper)]"
+            className="max-w-[18ch] font-sans text-[clamp(2.25rem,5vw,5rem)] font-semibold leading-[1.0] tracking-[-0.03em] text-[color:var(--color-paper)]"
           >
             why this exists
           </h2>
 
           <div
             ref={containerRef}
-            className="mt-16 max-w-[60ch] font-sans text-[clamp(1.6rem,3.4vw,3rem)] font-medium leading-[1.32] tracking-[-0.015em]"
+            className="mt-16 max-w-[60ch] font-sans text-[clamp(1.35rem,2.4vw,2.4rem)] font-medium leading-[1.34] tracking-[-0.015em]"
           >
             {PARAGRAPHS.map((segments, p) => (
               <p key={p} className={p === 0 ? "" : "mt-10"}>

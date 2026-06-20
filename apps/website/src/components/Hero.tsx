@@ -45,8 +45,8 @@ export function Hero() {
           id="hero-heading"
           className="mt-auto max-w-[20ch] font-sans font-semibold tracking-[-0.02em] text-white"
           style={{
-            fontSize: "clamp(2.625rem, 9.66vw, 8.14rem)",
-            lineHeight: 1.04,
+            fontSize: "clamp(2.25rem, 6.8vw, 7rem)",
+            lineHeight: 1.05,
           }}
         >
           <span className="hero-in block" style={{ animationDelay: "140ms" }}>

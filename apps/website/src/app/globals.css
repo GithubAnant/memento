@@ -37,6 +37,15 @@ body {
   padding-inline: clamp(20px, 4vw, 64px);
 }
 
+/* Laptop range (e.g. MacBook ~1280–1600px): wider gutters so content isn't
+   pinned to the left edge. Big screens already get margins from max-width,
+   so they keep the modest 64px gutter above. */
+@media (min-width: 1024px) and (max-width: 1599px) {
+  .shell {
+    padding-inline: clamp(64px, 9vw, 150px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
