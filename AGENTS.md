@@ -27,25 +27,19 @@ Rust source structure:
 
 All docs except CLAUDE.md, AGENTS.md, TODOS.md, and CHANGELOG.md live in `./docs/`. Feature specs live in `./SPECs/`.
 
-**Workflow**
-
-- [docs/workflows/agent-loop.md](./docs/workflows/agent-loop.md) — repeatable autonomous task execution loop
-- [docs/workflows/agent-review.md](./docs/workflows/agent-review.md) — review personas, findings format, quality checklist, escalation rules
-- [docs/workflows/worktrees.md](./docs/workflows/worktrees.md) — creating and managing parallel worktrees
-
 **Guidelines**
 
 - [docs/consolidation.md](./docs/consolidation.md) — if adding the next case touches more than one file, the structure is wrong: single source of truth, side-effect ownership, registry over per-case branches, one write path
 - [docs/react-guidelines.md](./docs/react-guidelines.md) — imports, state, side effects, component structure, persistence
 - [docs/zustand.md](./docs/zustand.md) — side effect timing, selectors, bail-out patterns
 - [docs/editor.md](./docs/editor.md) — CodeMirror layout-model APIs, scroll-handler ownership, block-widget patterns (decoration shape, range-select to enter edit mode, posAtDOM boundary handling, button focus race, scrollSnapshot for heightmap shifts)
+- [docs/open-flow.md](./docs/open-flow.md) — how files/folders reach the editor: `startup_open` vs `pending_open`, the two open mechanisms kept separate
 - [docs/vite-plus.md](./docs/vite-plus.md) — `vp` CLI usage and common pitfalls
 - [docs/keyboard-shortcuts.md](./docs/keyboard-shortcuts.md) — canonical shortcut map
 
 **Infra**
 
 - [docs/releasing.md](./docs/releasing.md) — how to cut a signed, notarized macOS release
-- [docs/website-deploy.md](./docs/website-deploy.md) — how to deploy the marketing website to Cloudflare Workers
 
 **Cross-cutting**
 
@@ -91,7 +85,7 @@ Rust (from `apps/desktop/src-tauri/`):
 
 ## Session Wrap
 
-Wrap per [agent-loop.md](./docs/workflows/agent-loop.md). One commit per completed task with a clear message. See the existing commit history for style.
+One commit per completed task with a clear message. See the existing commit history for style.
 
 <!--VITE PLUS START-->
 
