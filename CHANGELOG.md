@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-20
+
+- Add `apps/website`: a Next.js (App Router, Tailwind v4) marketing landing page for Memento, served on port 3002. Dark brutalist-editorial layout with vertical grid lines, sticky-stacking project cards, and sections for hero, screenshots, story, and a macOS download CTA. Builds static via `next build`.
+
 ## 2026-06-19
 
 - Add GitHub sync so Memento can be a local editor over a private GitHub repo (e.g. an AI agent's memory layer). Connect by pasting a GitHub Personal Access Token (with the `repo` scope) — it's validated against the GitHub API and then stored in the macOS Keychain, never on disk or in `.git/config`; an invalid token is rejected and nothing is saved. Pick a repo from the welcome screen and it clones to `~/Desktop/Memento/<repo>/`, opens as the workspace, and writes a `~/.memento/state.json` pointer so external agents/scripts can find the markdown without git or a token. If that path already holds a clone of the same repo (e.g. you reconnected after a previous run), it's reused instead of erroring; only an unrelated directory at the path is rejected.

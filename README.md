@@ -6,15 +6,13 @@ A fast, local-first editor for the markdown files in your workspace — Obsidian
 
 ## Why I made this
 
-I gave my [Poke](https://poke.com) memory write access so it could finally save things somewhere that lasts.
+I wanted to give my [Poke](https://poke.com) bot a memory layer — a place it could finally save things that lasts.
 
-The obvious first option is Poke's own built-in memory. But anyone who's used it knows it kind of sucks — it forgets things, constantly. And I have a few recipes installed that prompt me about my week: the hardships, the challenges, the small wins. All of that was going nowhere.
+The obvious first option is Poke's own built-in memory. But anyone who's used it knows it kind of sucks — it forgets things, constantly.
 
-So I pointed Poke at a private GitHub repo and gave it full access. Now it has a place to write. It can save a memory, come back later, append to it, edit it. It's just markdown on disk, so anything — Poke, Claude Code, a script, me — can read and write it directly.
+So I pointed Poke at a private GitHub repo. Now it has a place to write — save a memory, come back later, append, edit.
 
-The point isn't really the tooling. It's that in a few years, if I'm still around, it'll be kind of wonderful to read back through all of it.
-
-Memento is the editor for that repo. It's an Obsidian-style markdown app, except the workspace _is_ a git repo: it clones, auto-fetches as the agent writes remotely, and pushes my occasional edits back — the same sync gestures you'd expect from a code editor, made quiet enough to live in. The agent is the primary writer; I mostly read, and sometimes edit.
+Memento is the editor for that repo — an Obsidian-style app where the workspace _is_ a git repo, syncing as the agent writes. The agent is the primary writer; I mostly read, and sometimes edit.
 
 See [`SPECs/github-sync-spec.md`](./SPECs/github-sync-spec.md) for how the sync layer works.
 
