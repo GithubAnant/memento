@@ -26,7 +26,7 @@ export function DownloadCta() {
             id="download-heading"
             className="mt-[clamp(48px,9vh,140px)] max-w-[16ch] font-sans font-semibold text-white text-[clamp(2.75rem,8.5vw,6rem)] leading-[1.0] tracking-[-0.02em]"
           >
-            free, open source, and yours to keep — download memento for macOS
+            free, open source, and yours to keep
           </h2>
 
           {/* Bottom row: button lower-left */}
