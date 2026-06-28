@@ -18,8 +18,20 @@ export function useSyncTriggers() {
   // (not as a sync-store module-load side effect) to avoid the workspace-store
   // import-cycle TDZ that otherwise blocks the React mount.
   useEffect(() => {
+    // Seed signed-in + repo status, then fetch immediately. Without this the
+    // first fetch waits a full FETCH_INTERVAL_MS (or a focus event that never
+    // fires on the initial open), so a reopened app trusts its stale local
+    // HEAD — letting a push clobber commits the agent made remotely while the
+    // app was closed. refreshStatus must resolve first so the isRepo guard in
+    // fetch's trigger is meaningful.
     void useSyncStore.getState().refreshSignedIn();
-    void useSyncStore.getState().refreshStatus();
+    void useSyncStore
+      .getState()
+      .refreshStatus()
+      .then(() => {
+        const { signedIn, isRepo } = useSyncStore.getState();
+        if (signedIn && isRepo) void useSyncStore.getState().fetch();
+      });
     return watchWorkspaceForSync();
   }, []);
 

@@ -53,11 +53,16 @@ pub struct CloneResult {
     pub path: String,
 }
 
-/// Working-tree sync state, surfaced by the status-bar control.
+/// Working-tree sync state, surfaced by the status-bar control. `ahead`/
+/// `behind` are local-vs-`origin/<branch>` commit counts (behind = incoming
+/// commits the agent pushed while we were away); both are 0 when there is no
+/// remote-tracking ref yet (fresh repo before the first fetch).
 #[derive(Serialize)]
 pub struct SyncStatus {
     pub branch: String,
     pub dirty_count: usize,
+    pub ahead: usize,
+    pub behind: usize,
 }
 
 /// Outcome of a fetch. `diverged` means the local branch could not
@@ -128,6 +133,26 @@ fn dirty_count(repo: &Repository) -> Result<usize, AppError> {
     Ok(count)
 }
 
+/// Commits the local branch is ahead/behind `origin/<branch>`. Reads the
+/// remote-tracking ref (kept fresh by `do_fetch`'s explicit refspec), so this
+/// is a cheap local graph walk with no network. Returns `(0, 0)` when there is
+/// no local HEAD or no remote-tracking ref yet (e.g. before the first fetch).
+fn ahead_behind(repo: &Repository) -> Result<(usize, usize), AppError> {
+    let branch = current_branch(repo)?;
+    let local = match repo.head().and_then(|h| h.peel_to_commit()) {
+        Ok(commit) => commit.id(),
+        Err(_) => return Ok((0, 0)),
+    };
+    let upstream = match repo.find_reference(&format!("refs/remotes/origin/{branch}")) {
+        Ok(reference) => match reference.peel_to_commit() {
+            Ok(commit) => commit.id(),
+            Err(_) => return Ok((0, 0)),
+        },
+        Err(_) => return Ok((0, 0)),
+    };
+    Ok(repo.graph_ahead_behind(local, upstream)?)
+}
+
 fn open_repo(path: &str) -> Result<Repository, AppError> {
     Repository::open(path).map_err(|e| AppError::Git(e.to_string()))
 }
@@ -173,8 +198,12 @@ fn do_fetch(repo: &Repository, token: &str) -> Result<FetchResult, AppError> {
 
     let mut fetch_opts = FetchOptions::new();
     fetch_opts.remote_callbacks(auth_callbacks(token));
+    // Explicit refspec so the remote-tracking ref (refs/remotes/origin/<branch>)
+    // is updated, not just FETCH_HEAD — `ahead_behind` reads that ref to report
+    // the incoming-commit count between fetches.
+    let refspec = format!("refs/heads/{branch}:refs/remotes/origin/{branch}");
     repo.find_remote("origin")?
-        .fetch(&[&branch], Some(&mut fetch_opts), None)?;
+        .fetch(&[&refspec], Some(&mut fetch_opts), None)?;
 
     let fetch_head = repo.find_reference("FETCH_HEAD")?;
     let target = repo.reference_to_annotated_commit(&fetch_head)?;
@@ -565,9 +594,12 @@ pub async fn github_clone_repo(
 pub async fn github_sync_status(workspace_path: String) -> Result<SyncStatus, AppError> {
     tauri::async_runtime::spawn_blocking(move || {
         let repo = open_repo(&workspace_path)?;
+        let (ahead, behind) = ahead_behind(&repo)?;
         Ok(SyncStatus {
             branch: current_branch(&repo)?,
             dirty_count: dirty_count(&repo)?,
+            ahead,
+            behind,
         })
     })
     .await
@@ -609,9 +641,12 @@ pub async fn github_push(workspace_path: String, message: String) -> Result<Sync
             Err(e) => return Err(e),
         }
 
+        let (ahead, behind) = ahead_behind(&repo)?;
         Ok(SyncStatus {
             branch: current_branch(&repo)?,
             dirty_count: dirty_count(&repo)?,
+            ahead,
+            behind,
         })
     })
     .await
@@ -875,6 +910,45 @@ mod tests {
         assert_origin_match("git@github.com:owner/repo.git", "owner/repo", true);
         assert_origin_match("https://github.com/owner/other.git", "owner/repo", false);
         assert_origin_match("https://github.com/other/repo.git", "owner/repo", false);
+    }
+
+    #[test]
+    fn ahead_behind_counts_local_vs_tracking_ref() {
+        let (dir, repo) = init_repo_with_commit();
+        let base = repo.head().unwrap().peel_to_commit().unwrap();
+
+        // No remote-tracking ref yet → (0, 0).
+        assert_eq!(ahead_behind(&repo).unwrap(), (0, 0));
+
+        // Point origin/<branch> at the base commit, then add a local commit:
+        // local is 1 ahead, 0 behind.
+        let branch = current_branch(&repo).unwrap();
+        repo.reference(
+            &format!("refs/remotes/origin/{branch}"),
+            base.id(),
+            true,
+            "test",
+        )
+        .unwrap();
+        fs::write(workdir(&repo).join("README.md"), "local edit\n").unwrap();
+        commit_all(&repo, "local commit");
+        assert_eq!(ahead_behind(&repo).unwrap(), (1, 0));
+
+        // Move the tracking ref forward to a sibling commit so the graphs
+        // diverge: 1 ahead (local commit) and 1 behind (remote commit).
+        let sig = Signature::now("Remote", "remote@example.com").unwrap();
+        let tree = base.tree().unwrap();
+        let remote_oid = repo
+            .commit(None, &sig, &sig, "remote commit", &tree, &[&base])
+            .unwrap();
+        repo.reference(
+            &format!("refs/remotes/origin/{branch}"),
+            remote_oid,
+            true,
+            "test",
+        )
+        .unwrap();
+        assert_eq!(ahead_behind(&repo).unwrap(), (1, 1));
     }
 
     #[test]

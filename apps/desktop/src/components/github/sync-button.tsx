@@ -18,6 +18,7 @@ export function SyncButton() {
   const isRepo = useSyncStore((s) => s.isRepo);
   const phase = useSyncStore((s) => s.phase);
   const dirtyCount = useSyncStore((s) => s.dirtyCount);
+  const behind = useSyncStore((s) => s.behind);
   const diverged = useSyncStore((s) => s.diverged);
   const error = useSyncStore((s) => s.error);
   const openScm = useOpenScmTab();
@@ -25,7 +26,7 @@ export function SyncButton() {
 
   if (!signedIn || !isRepo) return null;
 
-  const { label, title } = describe({ phase, dirtyCount, diverged, error });
+  const { label, title } = describe({ phase, dirtyCount, behind, diverged, error });
 
   async function showMenu() {
     const items: MenuItemSpec[] = [];
@@ -99,18 +100,30 @@ export function SyncButton() {
 function describe({
   phase,
   dirtyCount,
+  behind,
   diverged,
   error,
 }: {
   phase: "idle" | "fetching" | "pushing";
   dirtyCount: number;
+  behind: number;
   diverged: boolean;
   error: string | null;
 }): { label: string; title: string } {
   if (phase === "fetching") return { label: "↓ Syncing…", title: "Fetching from GitHub…" };
   if (phase === "pushing") return { label: "↑ Pushing…", title: "Pushing to GitHub…" };
-  if (diverged) return { label: "⚠ Diverged", title: "Local changes diverged from remote" };
+  if (diverged) {
+    // Diverged means there are both incoming commits and local changes that
+    // can't fast-forward — show both sides like VSCode's ↓N ↑N.
+    const counts = behind > 0 ? `↓${behind} ↑${dirtyCount} ` : "";
+    return { label: `⚠ ${counts}Diverged`.trim(), title: "Local changes diverged from remote" };
+  }
   if (error) return { label: "⚠ Sync error", title: error };
+  if (behind > 0)
+    return {
+      label: `↓ ${behind} incoming`,
+      title: `${behind} commit${behind === 1 ? "" : "s"} to pull from GitHub`,
+    };
   if (dirtyCount > 0)
     return {
       label: `↑ ${dirtyCount} change${dirtyCount === 1 ? "" : "s"}`,

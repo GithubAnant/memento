@@ -103,10 +103,18 @@ Turn Memento into a local editor over a GitHub-backed memory repo, where:
     `diverged` status; the frontend shows a banner ("Local changes diverged
     from remote — push or discard") and offers push / discard-local actions.
     Fail explicitly, never auto-clobber.
-- Triggers (frontend): interval timer (~67s, off the round minute so installs
-  don't poll in lockstep), window focus, and tab visibility. All call the same
-  `github_fetch`; the sync store's `phase` guard coalesces overlapping
-  triggers.
+- Triggers (frontend): an immediate fetch on app open and on workspace switch
+  (right after the status snapshot, gated on `signedIn && isRepo`), then an
+  interval timer (~67s, off the round minute so installs don't poll in
+  lockstep), window focus, and tab visibility. All call the same `github_fetch`;
+  the sync store's `phase` guard coalesces overlapping triggers. The open/switch
+  fetch is what keeps a reopened app from trusting a stale local HEAD and
+  clobbering remote commits on the next push.
+- `github_fetch` uses an explicit `refs/heads/<b>:refs/remotes/origin/<b>`
+  refspec so the remote-tracking ref stays current; `github_sync_status` then
+  reports `ahead`/`behind` commit counts (local vs `origin/<branch>`) via
+  `graph_ahead_behind`. The sync button renders `behind` as an incoming ↓N
+  indicator, and ↓N ↑N together when diverged.
 - **No watcher coupling (decided during impl):** git's working-tree writes
   during fetch are intentionally _not_ suppressed. Push is a manual button
   (never auto-fired) so pulled writes can't start a push loop; the dirty count

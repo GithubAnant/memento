@@ -23,6 +23,8 @@ interface SyncState {
   phase: Phase;
   branch: string;
   dirtyCount: number;
+  /** Incoming commits on the remote not yet merged locally (VSCode's ↓N). */
+  behind: number;
   /** Local diverged from remote and can't fast-forward; surfaces the banner. */
   diverged: boolean;
   /** Last operation error (network/git), shown subtly; cleared on success. */
@@ -63,6 +65,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   phase: "idle",
   branch: "",
   dirtyCount: 0,
+  behind: 0,
   diverged: false,
   error: null,
   changedFiles: [],
@@ -87,6 +90,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         isRepo: true,
         branch: status.branch,
         dirtyCount: status.dirty_count,
+        behind: status.behind,
       });
       void get().refreshChangedFiles();
     } catch {
@@ -121,6 +125,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       set({
         branch: status.branch,
         dirtyCount: status.dirty_count,
+        behind: status.behind,
         diverged: false,
       });
     } catch (e) {
@@ -203,6 +208,15 @@ export function watchWorkspaceForSync(): () => void {
     if (state.root === lastRoot) return;
     lastRoot = state.root;
     void useSyncStore.getState().refreshSignedIn();
-    void useSyncStore.getState().refreshStatus();
+    void useSyncStore
+      .getState()
+      .refreshStatus()
+      .then(() => {
+        // Fetch on switch for the same reason as on mount: a newly opened
+        // workspace must reconcile with its remote before the user can act on
+        // a stale local HEAD. The fetch phase-guard coalesces with any inflight.
+        const { signedIn, isRepo } = useSyncStore.getState();
+        if (signedIn && isRepo) void useSyncStore.getState().fetch();
+      });
   });
 }

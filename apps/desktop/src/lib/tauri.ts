@@ -270,6 +270,10 @@ export interface RepoInfo {
 export interface SyncStatus {
   branch: string;
   dirty_count: number;
+  /** Local commits not yet on origin/<branch>. */
+  ahead: number;
+  /** Incoming commits on origin/<branch> not yet merged locally. */
+  behind: number;
 }
 
 export interface FetchResult {

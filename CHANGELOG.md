@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-28
+
+- Fetch from GitHub immediately on app open (and on workspace switch) instead of waiting up to ~67s for the first interval tick. Reopening the app after the agent pushed remotely now reconciles right away, closing the window where a stale local state could overwrite remote commits on the next push.
+- Show an incoming-commits indicator (↓N) on the sync button when the remote is ahead, and surface both sides (↓N ↑N) when local and remote have diverged — mirroring VSCode's source-control counts. Sync status now reports `ahead`/`behind` commit counts derived from the `origin/<branch>` tracking ref.
+
 ## 2026-06-20
 
 - Add `apps/website`: a Next.js (App Router, Tailwind v4) marketing landing page for Memento, served on port 3002. Dark brutalist-editorial layout with vertical grid lines, sticky-stacking project cards, and sections for hero, screenshots, story, and a macOS download CTA. Builds static via `next build`.
