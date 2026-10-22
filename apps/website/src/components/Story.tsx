@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 /**
  * Story / About — black, full-width narrative section with vertical grid lines.
@@ -41,20 +41,26 @@ const PARAGRAPHS: Segment[][] = [
 // continuously letter by letter across the whole story.
 const TOTAL = PARAGRAPHS.reduce((n, segs) => n + segs.reduce((m, s) => m + s.text.length, 0), 0);
 
+function subscribeReducedMotion(onChange: () => void) {
+  const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
+
+function getReducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 export function Story() {
   const containerRef = useRef<HTMLDivElement>(null);
   // progress 0 → nothing lit; 1 → all letters white
   const [progress, setProgress] = useState(0);
+  const reduceMotion = useSyncExternalStore(subscribeReducedMotion, getReducedMotion, () => false);
 
   useEffect(() => {
+    if (reduceMotion) return;
     const el = containerRef.current;
     if (!el) return;
-
-    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) {
-      setProgress(1);
-      return;
-    }
 
     let raf = 0;
     const update = () => {
@@ -82,10 +88,10 @@ export function Story() {
       window.removeEventListener("resize", onScroll);
       if (raf) window.cancelAnimationFrame(raf);
     };
-  }, []);
+  }, [reduceMotion]);
 
   // How many characters are "lit" so far; a per-char feather softens the edge.
-  const lit = progress * TOTAL;
+  const lit = (reduceMotion ? 1 : progress) * TOTAL;
 
   let charIndex = -1;
   return (

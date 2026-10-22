@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-22
+
+- Upgrade the marketing site (`apps/website`) from Next.js 16.2.9 to 16.4.2, with React 19.3.1 and `eslint-config-next` 16.4.2. Lint now uses the ESLint CLI instead of the removed `next lint` command.
+
 ## 2026-06-28
 
 - Fetch from GitHub immediately on app open (and on workspace switch) instead of waiting up to ~67s for the first interval tick. Reopening the app after the agent pushed remotely now reconciles right away, closing the window where a stale local state could overwrite remote commits on the next push.

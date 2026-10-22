@@ -33,6 +33,8 @@ catalog:
   beautiful-mermaid: ^1.1.3
   cmdk: ^1.1.1
   dompurify: ^3.4.7
+  eslint: ^9.39.5
+  eslint-config-next: 16.4.2
   motion: ^12.39.0
   node-emoji: ^2.2.0
   playwright: ^1.61.0
